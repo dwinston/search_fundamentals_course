@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(format='%(levelname)s:%(message)s')
 
+INDEX_EVERY = 2000
+
 # NOTE: this is not a complete list of fields.  If you wish to add more, put in the appropriate XPath expression.
 # TODO: is there a way to do this using XPath/XSL Functions so that we don't have to maintain a big list?
 mappings = [
@@ -60,7 +62,17 @@ def get_opensearch():
     auth = ('admin', 'admin')
 
     #### Step 2.a: Create a connection to OpenSearch
-    client = None
+    client = OpenSearch(
+        hosts=[{'host': host, 'port': port}],
+        http_compress=True,  # enables gzip compression for request bodies
+        http_auth=auth,
+        # client_cert = client_cert_path,
+        # client_key = client_key_path,
+        use_ssl=True,
+        verify_certs=False,
+        ssl_assert_hostname=False,
+        ssl_show_warn=False,
+    )
     return client
 
 
@@ -88,10 +100,19 @@ def main(source_dir: str, index_name: str):
             # print(doc)
             if not 'productId' in doc or len(doc['productId']) == 0:
                 continue
-
             #### Step 2.b: Create a valid OpenSearch Doc and bulk index 2000 docs at a time
-            the_doc = None
+            the_doc = dict(_index=index_name, id=doc["sku"], **doc)
             docs.append(the_doc)
+            if len(docs) == INDEX_EVERY:
+                bulk(client, docs)
+                docs_indexed += INDEX_EVERY
+                logger.info(f'{docs_indexed} documents indexed')
+                docs = []
+        if docs:
+            bulk(client, docs)
+            logger.info(f'{docs_indexed} documents indexed')
+            docs_indexed += len(docs)
+
     toc = time.perf_counter()
     logger.info(f'Done. Total docs: {docs_indexed}.  Total time: {((toc - tic) / 60):0.3f} mins.')
 

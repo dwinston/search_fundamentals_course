@@ -111,15 +111,44 @@ def create_query(user_query, filters, sort="_score", sortDir="desc"):
     query_obj = {
         'size': 10,
         "query": {
-            "bool": {
-                "must": [
-                    {"query_string": {
-                        "fields": ["name", "shortDescription", "longDescription"],
-                        "query": user_query,
-                        "phrase_slop": 3,
-                    }}],
-                "filter": filters,
+            "function_score": {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"query_string": {
+                                "fields": ["name^1000", "shortDescription^50", "longDescription^10"],
+                                "query": user_query,
+                                "phrase_slop": 3,
+                            }}],
+                        "filter": filters,
+                    }
+                },
+                "boost_mode": "multiply",
+                "score_mode": "avg",
+                "functions": [
+                    {
+                        "field_value_factor": {
+                            "field": "salesRankLongTerm",
+                            "missing": 100000000,
+                            "modifier": "reciprocal"
+
+                        }
+                    }, {
+                        "field_value_factor": {
+                            "field": "salesRankMediumTerm",
+                            "missing": 100000000,
+                            "modifier": "reciprocal"
+                        }
+                    }, {
+                        "field_value_factor": {
+                            "field": "salesRankShortTerm",
+                            "missing": 100000000,
+                            "modifier": "reciprocal"
+                        }
+                    }
+                ]
             }
+
         },
         "aggs": {
             #### Step 4.b.i: create the appropriate query and aggregations here
